@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "tonc.h": "c",
+        "tonc_input.h": "c",
+        "tonc_tte.h": "c",
+        "tonc_core.h": "c",
+        "tonc_bios.h": "c"
+    },
+    "files.autoSave": "afterDelay"
+}
