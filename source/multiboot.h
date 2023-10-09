@@ -57,10 +57,5 @@ enum OperationStatus send_palette(MultiBootParam *multibootParameters, enum Mult
 enum OperationStatus confirm_handshake(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
 
 Responses multiboot_exchange(u16 data, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-void wait_sync(u32 verticalLines);
-
-bool isSIOCNTBitHigh(u8 bit);
-void setSIOCNTBitHigh(u8 bit);
-void setSIOCNTBitLow(u8 bit);
 
 #endif
