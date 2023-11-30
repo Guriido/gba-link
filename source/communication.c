@@ -89,8 +89,6 @@ u32 comm_exchange_normal(u32 data, bool leader, CancelFunc isCanceled)
 
     if (leader)
     {
-        wait_sync(COMM_WAIT_BEFORE_TRANSFER);
-
         // wait for release of start bit
         while (isSIOCNTBitHigh(COMM_SIOCNT_NORMAL_SI_BIT))
         { RETURN_IF_CANCELED(isCanceled, received_data); }
