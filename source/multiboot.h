@@ -49,13 +49,5 @@ typedef struct {
 
 bool is_booted_from_multiboot();
 enum OperationStatus startMultiBoot(const void* rom, u32 romSize, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus detect_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus confirm_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus send_header(const void* rom, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus complete_header_sending(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus send_palette(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-enum OperationStatus confirm_handshake(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
-
-Responses multiboot_exchange(u16 data, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled);
 
 #endif
