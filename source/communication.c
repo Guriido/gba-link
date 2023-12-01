@@ -4,6 +4,13 @@
 #include "logging.h"
 #include "communication.h"
 
+static bool comm_is_parent() { return !isSIOCNTBitHigh(COMM_SIOCNT_SITERMINAL_BIT); }
+
+
+int comm_get_multiplayer_id()
+{
+    return (REG_SIOCNT>>4) & 0b11;
+}
 
 enum OperationStatus comm_init(CancelFunc isCanceled)
 {
@@ -60,10 +67,6 @@ MultiplayData comm_exchange(u16 data, CancelFunc isCanceled)
 }
 
 
-int comm_get_multiplayer_id()
-{
-    return (REG_SIOCNT>>4) & 0b11;
-}
 
 
 enum OperationStatus comm_init_normal(bool leader)
@@ -89,8 +92,6 @@ u32 comm_exchange_normal(u32 data, bool leader, CancelFunc isCanceled)
 
     if (leader)
     {
-        wait_sync(COMM_WAIT_BEFORE_TRANSFER);
-
         // wait for release of start bit
         while (isSIOCNTBitHigh(COMM_SIOCNT_NORMAL_SI_BIT))
         { RETURN_IF_CANCELED(isCanceled, received_data); }
@@ -122,4 +123,3 @@ u32 comm_exchange_normal(u32 data, bool leader, CancelFunc isCanceled)
 }
 
 
-bool comm_is_parent() { return !isSIOCNTBitHigh(COMM_SIOCNT_SITERMINAL_BIT); }

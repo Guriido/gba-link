@@ -5,52 +5,44 @@
 #include "logging.h"
 
 
-
-
-bool is_booted_from_multiboot()
+static Responses multiboot_exchange(u16 data, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
-    // returns True if the current gba was booted from multiboot (else if booted from "normal" cartridge)
-	const void* rom = (const void*)MEM_EWRAM;
-    return (
-        (*((u8*)rom + MULTIBOOT_HEADER_FIXED_BYTE_ADDRESS) == MULTIBOOT_HEADER_FIXED_BYTE_VALUE) & // cartridge header is in EWRAM
-        (*((u8*)rom + MULTIBOOT_HEADER_BOOT_MODE_ADDRESS)  != 0)  // MULTIBOOT BOOT MODE for client is 1 2 or 3
-    );
+    int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
+    Responses responses;
+    responses.d[0] = 0xffff;  // value for disconnected client
+    responses.d[1] = 0xffff;  // value for disconnected client
+    responses.d[2] = 0xffff;  // value for disconnected client
+
+    wait_sync(COMM_WAIT_BEFORE_TRANSFER);
+
+    // wait for start bit to be cleared
+    while (isSIOCNTBitHigh(COMM_SIOCNT_START_BIT))
+    { RETURN_IF_CANCELED(isCanceled, responses); }
+
+    switch (sessionMode)
+    {
+    case MULTIPLAY_MODE:
+        REG_SIOMLT_SEND = data;
+        break;
+    default:
+        // case for normal mode
+        REG_SIOMULTI1 = 0x0000;  // reset upper 16 bits
+        REG_SIODATA32 = data;    // set lower 16 bits
+        break;
+    }
+    setSIOCNTBitHigh(COMM_SIOCNT_START_BIT);
+
+    // wait for start bit to be cleared (-> data send)
+    while (isSIOCNTBitHigh(COMM_SIOCNT_START_BIT))
+    { RETURN_IF_CANCELED(isCanceled, responses); }
+
+    for (u32 i = 0; i < maxClients; i++)
+        responses.d[i] = REG_SIOMULTI[1 + i];
+
+    return responses;
 }
 
-
-enum OperationStatus startMultiBoot(const void* rom, u32 romSize, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
-{
-    // see https://www.problemkaputt.de/gbatek.htm#biosmultibootsinglegamepak
-    // and https://retrocomputing.stackexchange.com/questions/14317/what-is-the-protocol-for-bootstrapping-a-game-boy-advance-over-a-link-cable
-
-    enum OperationStatus op_s;
-    MultiBootParam multiboot_parameters;
-    multiboot_parameters.palette_data = MULTIBOOT_PALETTE_DATA;
-    multiboot_parameters.boot_srcp = (u8*)rom + MULTIBOOT_HEADER_SIZE;
-    multiboot_parameters.boot_endp = (u8*)rom + romSize;
-    multiboot_parameters.client_data[0] = 0xff;  // fill clients
-    multiboot_parameters.client_data[1] = 0xff;
-    multiboot_parameters.client_data[2] = 0xff;
-
-    set_multiplayer_communication_session_mode(sessionMode);
-    TRY_OPS(detect_clients(&multiboot_parameters, sessionMode, isCanceled))
-    TRY_OPS(confirm_clients(&multiboot_parameters, sessionMode, isCanceled))
-    TRY_OPS(send_header((const void*)rom, sessionMode, isCanceled))
-    TRY_OPS(complete_header_sending(&multiboot_parameters, sessionMode, isCanceled))
-    TRY_OPS(send_palette(&multiboot_parameters, sessionMode, isCanceled))
-    TRY_OPS(confirm_handshake(&multiboot_parameters, sessionMode, isCanceled))
-
-    int result = MultiBoot(&multiboot_parameters,
-                           sessionMode == MULTIPLAY_MODE ? 1: 0);
-
-    set_multiplayer_communication_session_mode(GENERAL_PURPOSE_MODE);
-    return result == 1 ? OPS_FAILURE : OPS_SUCCESS;    
-}
-
-
-
-
-enum OperationStatus detect_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus detect_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
     for (u32 t = 0; t < MULTIBOOT_DETECTION_MAX_TRIES; t++) {
@@ -89,7 +81,7 @@ enum OperationStatus detect_clients(MultiBootParam *multibootParameters, enum Mu
 }
 
 
-enum OperationStatus send_header(const void* rom, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus send_header(const void* rom, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     u16* headerPointer = (u16*)rom;
     for (int i = 0; i < MULTIBOOT_HEADER_SIZE; i += 2) // sending header 2 bytes by 2 bytes
@@ -101,7 +93,7 @@ enum OperationStatus send_header(const void* rom, enum MultiplayerSessionMode se
     return OPS_SUCCESS;
 }
 
-enum OperationStatus complete_header_sending(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus complete_header_sending(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
     // Leader let client know header sending is complete
@@ -167,7 +159,7 @@ enum OperationStatus complete_header_sending(MultiBootParam *multibootParameters
 }
 
 
-enum OperationStatus send_palette(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus send_palette(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     // try to send palette to clients until each of them responds with client data
     u8 confirmed_clients = 0;
@@ -198,7 +190,7 @@ enum OperationStatus send_palette(MultiBootParam *multibootParameters, enum Mult
     return OPS_SUCCESS;
 }
 
-enum OperationStatus confirm_handshake(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus confirm_handshake(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
     // try to send palette to clients until each of them responds with client data
@@ -221,7 +213,7 @@ enum OperationStatus confirm_handshake(MultiBootParam *multibootParameters, enum
 }
 
 
-enum OperationStatus confirm_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+static enum OperationStatus confirm_clients(MultiBootParam *multibootParameters, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
 {
     int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
     // Leader sends clients infos to all clients
@@ -257,40 +249,47 @@ enum OperationStatus confirm_clients(MultiBootParam *multibootParameters, enum M
     return OPS_SUCCESS;
 }
 
-Responses multiboot_exchange(u16 data, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+
+
+
+
+bool is_booted_from_multiboot()
 {
-    int maxClients = MULTIBOOT_MAX_CLIENTS(sessionMode);
-    Responses responses;
-    responses.d[0] = 0xffff;  // value for disconnected client
-    responses.d[1] = 0xffff;  // value for disconnected client
-    responses.d[2] = 0xffff;  // value for disconnected client
+    // returns True if the current gba was booted from multiboot (else if booted from "normal" cartridge)
+	const void* rom = (const void*)MEM_EWRAM;
+    return (
+        (*((u8*)rom + MULTIBOOT_HEADER_FIXED_BYTE_ADDRESS) == MULTIBOOT_HEADER_FIXED_BYTE_VALUE) & // cartridge header is in EWRAM
+        (*((u8*)rom + MULTIBOOT_HEADER_BOOT_MODE_ADDRESS)  != 0)  // MULTIBOOT BOOT MODE for client is 1 2 or 3
+    );
+}
 
-    wait_sync(COMM_WAIT_BEFORE_TRANSFER);
 
-    // wait for start bit to be cleared
-    while (isSIOCNTBitHigh(COMM_SIOCNT_START_BIT))
-    { RETURN_IF_CANCELED(isCanceled, responses); }
+enum OperationStatus startMultiBoot(const void* rom, u32 romSize, enum MultiplayerSessionMode sessionMode, CancelFunc isCanceled)
+{
+    // see https://www.problemkaputt.de/gbatek.htm#biosmultibootsinglegamepak
+    // and https://retrocomputing.stackexchange.com/questions/14317/what-is-the-protocol-for-bootstrapping-a-game-boy-advance-over-a-link-cable
 
-    switch (sessionMode)
-    {
-    case MULTIPLAY_MODE:
-        REG_SIOMLT_SEND = data;
-        break;
-    default:
-        // case for normal mode
-        REG_SIOMULTI1 = 0x0000;  // reset upper 16 bits
-        REG_SIODATA32 = data;    // set lower 16 bits
-        break;
-    }
-    setSIOCNTBitHigh(COMM_SIOCNT_START_BIT);
+    enum OperationStatus op_s;
+    MultiBootParam multiboot_parameters;
+    multiboot_parameters.palette_data = MULTIBOOT_PALETTE_DATA;
+    multiboot_parameters.boot_srcp = (u8*)rom + MULTIBOOT_HEADER_SIZE;
+    multiboot_parameters.boot_endp = (u8*)rom + romSize;
+    multiboot_parameters.client_data[0] = 0xff;  // fill clients
+    multiboot_parameters.client_data[1] = 0xff;
+    multiboot_parameters.client_data[2] = 0xff;
 
-    // wait for start bit to be cleared (-> data send)
-    while (isSIOCNTBitHigh(COMM_SIOCNT_START_BIT))
-    { RETURN_IF_CANCELED(isCanceled, responses); }
+    set_multiplayer_communication_session_mode(sessionMode);
+    TRY_OPS(detect_clients(&multiboot_parameters, sessionMode, isCanceled))
+    TRY_OPS(confirm_clients(&multiboot_parameters, sessionMode, isCanceled))
+    TRY_OPS(send_header((const void*)rom, sessionMode, isCanceled))
+    TRY_OPS(complete_header_sending(&multiboot_parameters, sessionMode, isCanceled))
+    TRY_OPS(send_palette(&multiboot_parameters, sessionMode, isCanceled))
+    TRY_OPS(confirm_handshake(&multiboot_parameters, sessionMode, isCanceled))
 
-    for (u32 i = 0; i < maxClients; i++)
-        responses.d[i] = REG_SIOMULTI[1 + i];
+    int result = MultiBoot(&multiboot_parameters,
+                           sessionMode == MULTIPLAY_MODE ? 1: 0);
 
-    return responses;
+    set_multiplayer_communication_session_mode(GENERAL_PURPOSE_MODE);
+    return result == 1 ? OPS_FAILURE : OPS_SUCCESS;    
 }
 
