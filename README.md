@@ -43,3 +43,11 @@ Allows:
 The example in source/main.c displays an image as background on the client screen after multiboot, and GBAs can then interact with each other upon pressing A button.
 
 TODO: add a decent HOW_TO
+
+
+## CHANGELOG
+
+- 2023/12/01:
+  - minor changes in internal functions, reduce wait between comms in normal mode
+- 2023/09/29:
+  - initial release
